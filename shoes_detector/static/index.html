@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8" />
+    <title>ORT-Web Cropper</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        body {
+            font: 14px/1.4 system-ui, sans-serif;
+            max-width: 900px;
+            margin: 2rem auto;
+        }
+
+        button {
+            padding: .6rem 1rem;
+            margin-right: .5rem;
+        }
+
+        progress {
+            width: 100%;
+            height: 16px;
+        }
+
+        .row {
+            margin: .75rem 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>ONNXRuntime-Web 대량 크롭 저장</h1>
+
+    <div class="row">
+        <label>모델(.onnx): <input id="modelFile" type="file" accept=".onnx" /></label>
+    </div>
+
+    <div class="row">
+        <button id="pickDir">폴더 선택(읽기/쓰기)</button>
+        <button id="start" disabled>처리 시작</button>
+    </div>
+
+    <div class="row">
+        <progress id="prog" value="0" max="100"></progress>
+        <div id="status">대기 중</div>
+    </div>
+
+    <script type="module" src="./main.js"></script>
+</body>
+
+</html>
