@@ -15,16 +15,16 @@ async function countFilesRecursively(handle) {
   let count = 0;
   for await (const [, h] of handle.entries()) {
     if (h.kind === "file") count++;
-    else if (h.kind === "directory") count += await countFilesRecursively(h);
+    else if (h.kind === "directory" && h.name !== "box")
+      count += await countFilesRecursively(h);
   }
-  console.log(count);
   return count;
 }
 
 async function* walk(handle) {
   for await (const [name, h] of handle.entries()) {
     if (h.kind === "file") yield { name, handle: h };
-    else if (h.kind === "directory") yield* walk(h);
+    else if (h.kind === "directory" && h.name !== "box") yield* walk(h);
   }
 }
 
@@ -47,7 +47,6 @@ startBtn.onclick = async () => {
   // 워커 생성
   worker?.terminate();
   worker = new Worker("ort/worker.js");
-  console.log("#1");
 
   // 진행률 세팅
   totalFiles = await countFilesRecursively(dirHandle);
@@ -55,12 +54,10 @@ startBtn.onclick = async () => {
   prog.value = 0;
   prog.max = totalFiles || 1;
   statusEl.textContent = `총 ${totalFiles}개 파일 처리 중...`;
-  console.log("#2");
 
   // 모델 바이트 worker로 전달
   const modelBytes = await modelFile.arrayBuffer();
   worker.postMessage({ type: "init", modelBytes: modelBytes }, [modelBytes]);
-  console.log("#3");
 
   worker.onerror = async (e) => {
     throw new Error(e);
@@ -119,6 +116,7 @@ async function processAllFiles() {
         const file = await item.handle.getFile();
         const imgBytes = await file.arrayBuffer();
         // 파일명은 확장자 제거하여 결과명 prefix로 사용
+        console.log(item.name);
         const base = item.name.replace(/\.[^.]+$/, "");
         worker.postMessage(
           { type: "process", imageBytes: imgBytes, baseName: base },
