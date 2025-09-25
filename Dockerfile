@@ -9,4 +9,4 @@ RUN pip install poetry && poetry install
 
 WORKDIR /app/shoes_detector
 
-CMD [ "poetry", "run", "fastapi", "run" ]
+CMD [ "poetry", "run", "uvicorn", "app:app", "--host=0.0.0.0", "--ssl-keyfile=../key.pem", "--ssl-certfile=../cert.pem" ]
