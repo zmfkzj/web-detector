@@ -116,7 +116,6 @@ async function processAllFiles() {
         const file = await item.handle.getFile();
         const imgBytes = await file.arrayBuffer();
         // 파일명은 확장자 제거하여 결과명 prefix로 사용
-        console.log(item.name);
         const base = item.name.replace(/\.[^.]+$/, "");
         worker.postMessage(
           { type: "process", imageBytes: imgBytes, baseName: base },

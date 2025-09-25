@@ -23,7 +23,8 @@ onmessage = (e) => {
       queue = queue
         .then(async () => {
           session = await ort.InferenceSession.create(msg.modelBytes, {
-            executionProviders: ["webgpu", "wasm"],
+            executionProviders: ["wasm"],
+            // executionProviders: ["webgpu", "wasm"],
             graphOptimizationLevel: "all",
           });
           postMessage({ type: "ready" });
@@ -66,6 +67,7 @@ async function processOne(imageBytes, baseName) {
   // 추론
   const feeds = { [INPUT_NAME]: inputTensor };
   const outputMap = await session.run(feeds);
+  console.log(outputMap);
 
   // 출력명은 모델에 따라 다릅니다. 보통 첫 키 사용(단일 출력 가정)
   //     output_names=["classes", "scores", "bboxes"]
