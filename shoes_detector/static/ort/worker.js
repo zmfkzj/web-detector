@@ -76,7 +76,7 @@ async function processOne(imageBytes, baseName) {
   // ---- 후처리 (모델 맞게 조정) ----
   const rows = scores.filter((v, i, a) => v != 0).length;
   let minCenterDistance = 2.0;
-  let box = null;
+  let box = { x1: 0, y1: 0, x2: MODEL_SIZE, y2: MODEL_SIZE };
   for (let i = 0; i < rows; i++) {
     const off = i * 4;
     const ncx = bboxes[off + 0],
@@ -190,13 +190,25 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
 
-// === OffscreenCanvas 크롭 → PNG 바이트(ArrayBuffer) ===
-async function cropToJPG(bmp, x1, y1, x2, y2) {
-  const w = Math.max(1, Math.round(x2 - x1));
-  const h = Math.max(1, Math.round(y2 - y1));
+async function resize(bmp, width, height) {
   const c = new OffscreenCanvas(w, h);
   const ctx = c.getContext("2d");
-  ctx.drawImage(bmp, Math.round(x1), Math.round(y1), w, h, 0, 0, w, h);
-  const blob = await c.convertToBlob({ type: "image/jpeg" });
+}
+
+// === OffscreenCanvas 크롭 → PNG 바이트(ArrayBuffer) ===
+async function cropToJPG(bmp, x1, y1, x2, y2) {
+  const imW = bmp.width,
+    imH = bmp.height;
+
+  const r = 1920 / imW;
+  const w = Math.max(1, Math.round((x2 - x1) * r));
+  const h = Math.max(1, Math.round((y2 - y1) * r));
+  const c = new OffscreenCanvas(1920, 1080);
+  const ctx = c.getContext("2d");
+  const c2 = new OffscreenCanvas(w, h);
+  const ctx2 = c2.getContext("2d");
+  ctx.drawImage(bmp, 0, 0, 1920, 1080);
+  ctx2.drawImage(c, Math.round(x1 * r), Math.round(y1 * r), w, h, 0, 0, w, h);
+  const blob = await c2.convertToBlob({ type: "image/jpeg" });
   return await blob.arrayBuffer(); // transferable
 }
