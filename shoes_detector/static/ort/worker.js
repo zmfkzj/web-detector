@@ -2,6 +2,7 @@
 importScripts(
   "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.js"
 );
+importScripts("opencv.js");
 
 let session = null;
 let queue = Promise.resolve();
@@ -152,16 +153,53 @@ async function preprocessToTensor(bmp, size) {
   const padW = size - newW;
   const padH = size - newH;
 
-  const canvas = new OffscreenCanvas(size, size);
+  const canvas = new OffscreenCanvas(inW, inH);
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "rgb(0,0,0)"; // YOLO letterbox 기본
-  ctx.fillRect(0, 0, size, size);
-  const dx = Math.floor(padW / 2);
-  const dy = Math.floor(padH / 2);
-  ctx.filter = "grayscale(100%)";
-  ctx.drawImage(bmp, 0, 0, inW, inH, dx, dy, newW, newH);
+  ctx.drawImage(bmp, 0, 0, inW, inH);
+  // cv = cv instanceof Promise ? await cv : cv;
+  let src = cv.matFromImageData(ctx.getImageData(0, 0, inW, inH));
+  let resize_mat = new cv.Mat();
+  let dsize = new cv.Size(newW, newH);
+  cv.resize(src, resize_mat, dsize);
+  src.delete();
 
-  const imgData = ctx.getImageData(0, 0, size, size);
+  let gray_mat = new cv.Mat();
+  cv.cvtColor(resize_mat, gray_mat, cv.COLOR_RGBA2GRAY, 4);
+  resize_mat.delete();
+
+  let pad_mat = new cv.Mat();
+  let s = new cv.Scalar(0, 0, 0, 255);
+  const top = Math.round(padH / 2),
+    left = Math.round(padW / 2);
+  cv.copyMakeBorder(
+    gray_mat,
+    pad_mat,
+    top,
+    size - top,
+    left,
+    size - left,
+    cv.BORDER_CONSTANT,
+    s
+  );
+  gray_mat.delete();
+
+  console.log(pad_mat);
+  const imgData = new ImageData(
+    new Uint8ClampedArray(pad_mat.data),
+    pad_mat.cols,
+    pad_mat.rows
+  );
+
+  pad_mat.delete();
+
+  // ctx.fillStyle = "rgb(0,0,0)"; // YOLO letterbox 기본
+  // ctx.fillRect(0, 0, size, size);
+  // const dx = Math.floor(padW / 2);
+  // const dy = Math.floor(padH / 2);
+  // ctx.filter = "grayscale(100%)";
+  // ctx.drawImage(bmp, 0, 0, inW, inH, dx, dy, newW, newH);
+
+  // const imgData = ctx.getImageData(0, 0, size, size);
   const data = imgData.data;
   const chw = new Float32Array(3 * size * size);
 
@@ -203,11 +241,6 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
 
-async function resize(bmp, width, height) {
-  const c = new OffscreenCanvas(w, h);
-  const ctx = c.getContext("2d");
-}
-
 // === OffscreenCanvas 크롭 → PNG 바이트(ArrayBuffer) ===
 async function cropToJPG(bmp, x1, y1, x2, y2) {
   const imW = bmp.width,
@@ -216,12 +249,25 @@ async function cropToJPG(bmp, x1, y1, x2, y2) {
   const r = 1920 / imW;
   const w = Math.max(1, Math.round((x2 - x1) * r));
   const h = Math.max(1, Math.round((y2 - y1) * r));
-  const c = new OffscreenCanvas(1920, 1080);
+  const c = new OffscreenCanvas(imW, imH);
   const ctx = c.getContext("2d");
-  const c2 = new OffscreenCanvas(w, h);
-  const ctx2 = c2.getContext("2d");
-  ctx.drawImage(bmp, 0, 0, 1920, 1080);
-  ctx2.drawImage(c, Math.round(x1 * r), Math.round(y1 * r), w, h, 0, 0, w, h);
-  const blob = await c2.convertToBlob({ type: "image/jpeg" });
-  return await blob.arrayBuffer(); // transferable
+  ctx.drawImage(bmp, 0, 0, imW, imH);
+
+  let src = cv.imread(c);
+  let resize_mat = new cv.Mat();
+  let dsize = cv.Size(1920, 1080);
+  cv.resize(src, resize_mat, dsize);
+  src.delete();
+
+  let rect = new cv.Rect(Math.round(x1 * r), Math.round(y1 * r), w, h);
+  let crop_mat = new cv.Mat();
+  crop_mat = resize_mat.roi(rect);
+  resize_mat.delete();
+  const imgData = new ImageData(
+    new Uint8ClampedArray(crop_mat.data),
+    crop_mat.cols,
+    crop_mat.rows
+  );
+
+  return imgData.data.buffer; // transferable
 }

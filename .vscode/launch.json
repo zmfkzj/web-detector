@@ -10,7 +10,7 @@
       "request": "launch",
       "module": "fastapi",
       "cwd": "${workspaceFolder}/shoes_detector",
-      "args": ["run", "--port", "9000"],
+      "args": ["run", "--port", "9000", "--reload"],
       "jinja": true
     }
   ]
