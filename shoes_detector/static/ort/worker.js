@@ -1,5 +1,7 @@
 // worker.js
-importScripts("https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js");
+importScripts(
+  "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.js"
+);
 
 let session = null;
 let queue = Promise.resolve();
@@ -23,8 +25,16 @@ onmessage = (e) => {
       queue = queue
         .then(async () => {
           session = await ort.InferenceSession.create(msg.modelBytes, {
-            executionProviders: ["wasm"],
-            // executionProviders: ["webgpu", "wasm"],
+            // executionProviders: ["wasm"],
+            executionProviders: [
+              {
+                name: "webnn",
+                deviceType: "gpu",
+                powerPreference: "default",
+              },
+              // "webgpu",
+              // "wasm",
+            ],
             graphOptimizationLevel: "all",
           });
           postMessage({ type: "ready" });
@@ -148,6 +158,7 @@ async function preprocessToTensor(bmp, size) {
   ctx.fillRect(0, 0, size, size);
   const dx = Math.floor(padW / 2);
   const dy = Math.floor(padH / 2);
+  ctx.filter = "grayscale(100%)";
   ctx.drawImage(bmp, 0, 0, inW, inH, dx, dy, newW, newH);
 
   const imgData = ctx.getImageData(0, 0, size, size);
