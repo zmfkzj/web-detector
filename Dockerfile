@@ -3,9 +3,9 @@ FROM python:3.12-slim
 
 COPY ./poetry.lock ./pyproject.toml /app/
 
-RUN pip install poetry && poetry install
-
 WORKDIR /app
+
+RUN pip install poetry && poetry install
 
 COPY . .
 
