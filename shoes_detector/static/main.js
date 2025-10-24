@@ -77,7 +77,6 @@ startBtn.onclick = async () => {
       // msg.crops: Array<{ name: string, pngBytes: ArrayBuffer }>
 
       const { name, pngBytes, coord } = msg.crops;
-      console.log(coord)
       const fileHandle = await outDir.getFileHandle(name, { create: true });
       const writable = await fileHandle.createWritable();
       await writable.write(pngBytes);
