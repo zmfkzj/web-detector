@@ -138,6 +138,7 @@ async function processOne(imgData, baseName) {
     mappedBox.x2,
     mappedBox.y2
   );
+  console.log(coord)
   const crop = { name: `${baseName}_crop.png`, pngBytes:buf, coord };
 
   return crop;

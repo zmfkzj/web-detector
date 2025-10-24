@@ -86,7 +86,7 @@ startBtn.onclick = async () => {
       const txtHandle = await outDir.getFileHandle("crop_bboxes.csv", { create: true });
       const txtWritable = await txtHandle.createWritable({ keepExistingData: true });
       await txtWritable.seek((await (await txtHandle.getFile()).text()).length);
-      await txtWritable.write("\n" + coord);
+      await txtWritable.write("\n"+name+"," + coord);
       await txtWritable.close();
 
       doneFiles++;

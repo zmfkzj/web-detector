@@ -1,11 +1,13 @@
 FROM python:3.12-slim
 
 
-COPY . /app/
+COPY ./poetry.lock ./pyproject.toml /app/
+
+RUN pip install poetry && poetry install
 
 WORKDIR /app
 
-RUN pip install poetry && poetry install
+COPY . .
 
 WORKDIR /app/shoes_detector
 
