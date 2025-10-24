@@ -76,11 +76,17 @@ startBtn.onclick = async () => {
       // 단일 이미지 처리 결과 수신 → 저장
       // msg.crops: Array<{ name: string, pngBytes: ArrayBuffer }>
 
-      const { name, pngBytes } = msg.crops;
+      const { name, pngBytes, coord } = msg.crops;
       const fileHandle = await outDir.getFileHandle(name, { create: true });
       const writable = await fileHandle.createWritable();
       await writable.write(pngBytes);
       await writable.close();
+
+      const txtHandle = await outDir.getFileHandle("crop_bboxes.csv", { create: true });
+      const txtWritable = await txtHandle.createWritable({ keepExistingData: true });
+      await txtWritable.seek((await (await txtHandle.getFile()).text()).length);
+      await txtWritable.write("\n" + coord);
+      await txtWritable.close();
 
       doneFiles++;
       prog.value = doneFiles;

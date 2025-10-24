@@ -131,14 +131,14 @@ async function processOne(imgData, baseName) {
   const mappedBox = deLetterbox(box, 3840, 2160, MODEL_SIZE, ratio, pad);
 
   // 크롭 PNG 생성
-  const pngBytes = await cropToPNG(
+  const {buf, coord} = await cropToPNG(
     imgData,
     mappedBox.x1,
     mappedBox.y1,
     mappedBox.x2,
     mappedBox.y2
   );
-  const crop = { name: `${baseName}_crop.png`, pngBytes };
+  const crop = { name: `${baseName}_crop.png`, pngBytes:buf, coord };
 
   return crop;
 }
@@ -283,5 +283,7 @@ async function cropToPNG(imgData, x1, y1, x2, y2) {
   ctx.drawImage(imgBitmap, 0, 0, w, h);
   const blob = await c.convertToBlob({ type: "image/png" });
 
-  return await blob.arrayBuffer(); // transferable
+  buf = await blob.arrayBuffer();
+  coord = {x1,y1,x2,y2}
+  return {buf, coord} // transferable
 }
