@@ -5,7 +5,7 @@ COPY ./poetry.lock ./pyproject.toml ./README.md /app/
 
 WORKDIR /app
 
-RUN pip install poetry && poetry install
+RUN pip install poetry && poetry install --no-root
 
 COPY . .
 
