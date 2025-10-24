@@ -64,8 +64,8 @@ onmessage = (e) => {
         bmp.close();
         let imgData = ctx.getImageData(0, 0, imW, imH);
 
-        const { name, pngBytes } = await processOne(imgData, baseName); // 내부에서 await session.run(...)
-        postMessage({ type: "result", crops: { name, pngBytes } }, [pngBytes]);
+        const { name, pngBytes, coord } = await processOne(imgData, baseName); // 내부에서 await session.run(...)
+        postMessage({ type: "result", crops: { name, pngBytes, coord } }, [pngBytes]);
       })
       .catch((err) =>
         postMessage({ type: "error", error: String(err.stack || err) })
@@ -139,8 +139,6 @@ async function processOne(imgData, baseName) {
     mappedBox.y2
   );
   const crop = { name: `${baseName}_crop.png`, pngBytes:buf, coord };
-  console.log(crop)
-
   return crop;
 }
 
