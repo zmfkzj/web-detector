@@ -77,6 +77,7 @@ startBtn.onclick = async () => {
       // msg.crops: Array<{ name: string, pngBytes: ArrayBuffer }>
 
       const { name, pngBytes, coord } = msg.crops;
+      const {x1, y1, x2, y2} = coord;
       const fileHandle = await outDir.getFileHandle(name, { create: true });
       const writable = await fileHandle.createWritable();
       await writable.write(pngBytes);
@@ -85,7 +86,7 @@ startBtn.onclick = async () => {
       const txtHandle = await outDir.getFileHandle("crop_bboxes.csv", { create: true });
       const txtWritable = await txtHandle.createWritable({ keepExistingData: true });
       await txtWritable.seek((await (await txtHandle.getFile()).text()).length);
-      await txtWritable.write("\n"+name+"," + coord);
+      await txtWritable.write("\n"+name+"," + x1+","+y1+","+x2+","+y2);
       await txtWritable.close();
 
       doneFiles++;
