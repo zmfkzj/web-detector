@@ -166,7 +166,7 @@ async function processOne(imgData, baseName, imageSave) {
   const origW = 3840;
   const origH = 2160;
 
-  const mapped = deLetterbox(bestBox, origW, origH, MODEL_SIZE, ratio, pad);
+  const mappedBox = deLetterbox(bestBox, origW, origH, MODEL_SIZE, ratio, pad);
 
   // 크롭 및 PNG 인코딩
   const coord = {
@@ -178,7 +178,7 @@ async function processOne(imgData, baseName, imageSave) {
 
   let buf;
   if (imageSave) {
-    buf = await cropToPNG(srcMat, mapped, origW);
+    buf = await cropToPNG(srcMat, mappedBox, origW);
   } else {
     buf = "";
   }
