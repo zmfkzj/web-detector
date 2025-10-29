@@ -180,8 +180,7 @@ async function processOne(imgData, baseName, imageSave) {
   if (imageSave) {
     buf = await cropToPNG(srcMat, mappedBox, origW);
   } else {
-    const c2 = new OffscreenCanvas(1920, 1080);
-    const blob = await c2.convertToBlob({ type: "image/png" });
+    const blob = new Blob();
     buf = await blob.arrayBuffer();
   }
 
