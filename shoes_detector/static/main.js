@@ -82,8 +82,8 @@ startBtn.onclick = async () => {
       // 단일 이미지 처리 결과 수신 → 저장
       // msg.crops: Array<{ name: string, pngBytes: ArrayBuffer }>
 
+      const { name, pngBytes, coord } = msg.crops;
       if (imageSave.value == "on") {
-        const { name, pngBytes, coord } = msg.crops;
         const fileHandle = await outDir.getFileHandle(name, { create: true });
         const writable = await fileHandle.createWritable();
         await writable.write(pngBytes);
