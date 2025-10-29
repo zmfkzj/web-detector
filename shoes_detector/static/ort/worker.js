@@ -16,7 +16,6 @@ const SCORE_THRESH = 0.97;
 
 // postMessage helper
 const send = (type, payload = {}) => postMessage({ type, ...payload });
-const c1 = new OffscreenCanvas(imW, imH);
 
 onmessage = (e) => {
   const msg = e.data;
@@ -58,6 +57,7 @@ onmessage = (e) => {
         const bmp = await createImageBitmap(new Blob([imageBytes]));
         const imW = bmp.width,
           imH = bmp.height;
+        const c1 = new OffscreenCanvas(imW, imH);
         const ctx = c1.getContext("2d");
         ctx.drawImage(bmp, 0, 0, imW, imH);
         bmp.close();
@@ -242,7 +242,6 @@ let resize_mat = new cv.Mat();
 let dsize = new cv.Size(1920, 1080);
 let crop_mat = new cv.Mat();
 let png_mat = new cv.Mat();
-const c2 = new OffscreenCanvas(w, h);
 // === OffscreenCanvas 크롭 → PNG 바이트(ArrayBuffer) ===
 async function cropToPNG(imgData, x1, y1, x2, y2) {
   const imW = 3840,
@@ -270,6 +269,7 @@ async function cropToPNG(imgData, x1, y1, x2, y2) {
 
   const imgBitmap = await createImageBitmap(png_imgData);
 
+  const c2 = new OffscreenCanvas(w, h);
   const ctx = c2.getContext("2d");
   ctx.drawImage(imgBitmap, 0, 0, w, h);
   const blob = await c2.convertToBlob({ type: "image/png" });
