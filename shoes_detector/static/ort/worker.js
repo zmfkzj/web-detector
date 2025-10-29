@@ -13,15 +13,28 @@ const MEAN = [123.675, 116.28, 103.53]; // 필요 시 [0.485,0.456,0.406]
 const STD = [58.395, 57.12, 57.375]; // 필요 시 [0.229,0.224,0.225]
 const SCORE_THRESH = 0.97;
 
-let resize_mat_1 = new cv.Mat();
-let gray_mat1 = new cv.Mat();
-let gray_mat2 = new cv.Mat();
-let pad_mat = new cv.Mat();
-let s = new cv.Scalar(0, 0, 0, 255);
-let resize_mat = new cv.Mat();
-let dsize = new cv.Size(1920, 1080);
-let crop_mat = new cv.Mat();
-let png_mat = new cv.Mat();
+cv["onRuntimeInitialized"] = () => {
+  console.log("OpenCV.js ready");
+  resize_mat_1 = new cv.Mat();
+  gray_mat1 = new cv.Mat();
+  gray_mat2 = new cv.Mat();
+  pad_mat = new cv.Mat();
+  s = new cv.Scalar(0, 0, 0, 255);
+  resize_mat = new cv.Mat();
+  dsize = new cv.Size(1920, 1080);
+  crop_mat = new cv.Mat();
+  png_mat = new cv.Mat();
+};
+
+let resize_mat_1,
+  gray_mat1,
+  gray_mat2,
+  pad_mat,
+  s,
+  resize_mat,
+  dsize,
+  crop_mat,
+  png_mat;
 
 // postMessage helper
 const send = (type, payload = {}) => postMessage({ type, ...payload });
