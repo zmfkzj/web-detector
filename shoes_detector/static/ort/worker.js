@@ -106,7 +106,10 @@ onmessage = (e) => {
 // 단일 이미지 처리
 async function processOne(imgData, baseName) {
   // 디코드
-  const { inputTensor, ratio, pad } = preprocessToTensor(imgData, MODEL_SIZE);
+  const { inputTensor, ratio, pad, src } = preprocessToTensor(
+    imgData,
+    MODEL_SIZE
+  );
   // 추론
   const feeds = { [INPUT_NAME]: inputTensor };
   const outputMap = await session.run(feeds);
@@ -155,7 +158,7 @@ async function processOne(imgData, baseName) {
 
   // 크롭 PNG 생성
   const { buf, coord } = await cropToPNG(
-    imgData,
+    src,
     mappedBox.x1,
     mappedBox.y1,
     mappedBox.x2,
@@ -180,7 +183,6 @@ function preprocessToTensor(imgData, size) {
 
   let dsize = new cv.Size(newW, newH);
   cv.resize(src, resize_mat_1, dsize);
-  src.delete();
 
   cv.cvtColor(resize_mat_1, gray_mat1, cv.COLOR_RGB2GRAY, 0);
 
@@ -233,7 +235,7 @@ function preprocessToTensor(imgData, size) {
 
   const tensor = new ort.Tensor("float32", chw, [1, 3, size, size]);
 
-  return { inputTensor: tensor, ratio: r, pad: { y: top, x: left } };
+  return { inputTensor: tensor, ratio: r, pad: { y: top, x: left }, src };
 }
 
 // === letterbox 좌표 -> 원본 좌표 ===
@@ -257,11 +259,9 @@ function clamp(v, lo, hi) {
 }
 
 // === OffscreenCanvas 크롭 → PNG 바이트(ArrayBuffer) ===
-async function cropToPNG(imgData, x1, y1, x2, y2) {
+async function cropToPNG(src, x1, y1, x2, y2) {
   const imW = 3840,
     imH = 2160;
-
-  let src = cv.matFromImageData(imgData);
 
   const r = 1920 / imW;
   const w = Math.max(1, Math.round((x2 - x1) * r));
