@@ -180,7 +180,9 @@ async function processOne(imgData, baseName, imageSave) {
   if (imageSave) {
     buf = await cropToPNG(srcMat, mappedBox, origW);
   } else {
-    buf = "";
+    const c2 = new OffscreenCanvas(rw, rh);
+    const blob = await c2.convertToBlob({ type: "image/png" });
+    buf = await blob.arrayBuffer();
   }
 
   // srcMat 정리
