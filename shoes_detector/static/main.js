@@ -55,6 +55,8 @@ startBtn.onclick = async () => {
   prog.max = totalFiles || 1;
   statusEl.textContent = `총 ${totalFiles}개 파일 처리 중...`;
 
+  csvRows = [];
+
   // 모델 바이트 worker로 전달
   const modelBytes = await modelFile.arrayBuffer();
   worker.postMessage({ type: "init", modelBytes: modelBytes }, [modelBytes]);
@@ -77,17 +79,13 @@ startBtn.onclick = async () => {
       // msg.crops: Array<{ name: string, pngBytes: ArrayBuffer }>
 
       const { name, pngBytes, coord } = msg.crops;
-      const {x1, y1, x2, y2} = coord;
       const fileHandle = await outDir.getFileHandle(name, { create: true });
       const writable = await fileHandle.createWritable();
       await writable.write(pngBytes);
       await writable.close();
 
-      const txtHandle = await outDir.getFileHandle("crop_bboxes.csv", { create: true });
-      const txtWritable = await txtHandle.createWritable({ keepExistingData: true });
-      await txtWritable.seek((await (await txtHandle.getFile()).text()).length);
-      await txtWritable.write("\n"+name+"," + x1+","+y1+","+x2+","+y2);
-      await txtWritable.close();
+      const { x1, y1, x2, y2 } = coord;
+      csvRows.push(`${name},${x1},${y1},${x2},${y2}`);
 
       doneFiles++;
       prog.value = doneFiles;
@@ -97,6 +95,18 @@ startBtn.onclick = async () => {
       doneFiles++;
       prog.value = doneFiles;
     } else if (msg.type === "done") {
+      try {
+        const txtHandle = await outDir.getFileHandle("crop_bboxes.csv", {
+          create: true,
+        });
+        const txtWritable = await txtHandle.createWritable();
+        await txtWritable.write(csvRows.join("\n") + "\n");
+        await txtWritable.close();
+      } catch (err) {
+        console.error("CSV flush error", err);
+        statusEl.textContent = "CSV 저장 에러: " + err.message;
+        return;
+      }
       statusEl.textContent = `완료! ${doneFiles}/${totalFiles}`;
     }
   };
