@@ -85,7 +85,7 @@ async function handleMessage(msg) {
       // EP 하나만 사용해 혼합 실행 문제 제거
       // 빠른 GPU 추론을 원하면 ["webgpu"]로 시도해도 된다.
       session = await ort.InferenceSession.create(msg.modelBytes, {
-        executionProviders: ["wasm"],
+        executionProviders: ["webgpu"],
         graphOptimizationLevel: "all",
       });
       sessionReady = true;
