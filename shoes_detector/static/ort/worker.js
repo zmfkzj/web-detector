@@ -71,7 +71,7 @@ async function handleMessage(msg) {
 
     if (!sessionReady) {
       session = await ort.InferenceSession.create(msg.modelBytes, {
-        executionProviders: ["webnn", "webgpu", "wasm"],
+        executionProviders: ["webgpu", "wasm"],
         graphOptimizationLevel: "all",
       });
       sessionReady = true;
