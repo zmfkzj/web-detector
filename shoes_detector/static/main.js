@@ -61,8 +61,11 @@ startBtn.onclick = async () => {
   const modelBytes = await modelFile.arrayBuffer();
   worker.postMessage({ type: "init", modelBytes: modelBytes }, [modelBytes]);
 
-  worker.onerror = async (e) => {
-    throw new Error(e);
+  worker.onerror = (e) => {
+    console.error("Worker runtime error:", e.message || e);
+    statusEl.textContent = "워커 에러 감지. 남은 작업은 스킵합니다.";
+    // 워커는 여기서 terminate 하지 않는다.
+    // throw 하지 않는다.
   };
 
   // 워커 메시지 처리
