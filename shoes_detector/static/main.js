@@ -179,7 +179,12 @@ async function processAllFiles() {
 
         // 워커에 전송. ArrayBuffer는 transfer
         worker.postMessage(
-          { type: "process", imageBytes: imgBytes, baseName: base, imageSave },
+          {
+            type: "process",
+            imageBytes: imgBytes,
+            baseName: base,
+            imageSave: imageSave.checked,
+          },
           [imgBytes]
         );
       } catch (err) {
