@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
@@ -6,7 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body {
-        font: 14px/1.4 system-ui, sans-serif;
+        font:
+          14px/1.4 system-ui,
+          sans-serif;
         max-width: 900px;
         margin: 2rem auto;
       }
@@ -39,6 +41,7 @@
     <div class="row">
       <button id="pickDir">폴더 선택(읽기/쓰기)</button>
       <button id="start" disabled>처리 시작</button>
+      <input type="checkbox" id="image_save" aria-label="이미지 저장" checked />
     </div>
 
     <div class="row">

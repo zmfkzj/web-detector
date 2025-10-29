@@ -4,6 +4,7 @@ const startBtn = document.querySelector("#start");
 const modelInput = document.querySelector("#modelFile");
 const prog = document.querySelector("#prog");
 const statusEl = document.querySelector("#status");
+const imageSave = document.querySelector("#image_save");
 
 let dirHandle = null;
 let outDir = null;
@@ -81,11 +82,13 @@ startBtn.onclick = async () => {
       // 단일 이미지 처리 결과 수신 → 저장
       // msg.crops: Array<{ name: string, pngBytes: ArrayBuffer }>
 
-      const { name, pngBytes, coord } = msg.crops;
-      const fileHandle = await outDir.getFileHandle(name, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(pngBytes);
-      await writable.close();
+      if (imageSave.value == "on") {
+        const { name, pngBytes, coord } = msg.crops;
+        const fileHandle = await outDir.getFileHandle(name, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(pngBytes);
+        await writable.close();
+      }
 
       const { x1, y1, x2, y2 } = coord;
       csvRows.push(`${name},${x1},${y1},${x2},${y2}`);
