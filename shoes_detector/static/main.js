@@ -217,6 +217,7 @@ async function finalizeCsvOnce() {
   csvFlushed = true;
 
   try {
+    await sleep(1000);
     const txtHandle = await outDir.getFileHandle("crop_bboxes.csv", {
       create: true,
     });
@@ -224,7 +225,6 @@ async function finalizeCsvOnce() {
     await txtWritable.write(csvRows.join("\n") + "\n");
     await txtWritable.close();
 
-    await sleep(1000);
     statusEl.textContent = `완료! ${doneFiles}/${totalFiles}`;
   } catch (err) {
     console.error("CSV flush error", err);
