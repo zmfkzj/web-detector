@@ -1,3 +1,4 @@
+// worker.js
 importScripts(
   "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.js"
 );
@@ -6,27 +7,35 @@ importScripts("opencv.js");
 let session = null;
 let queue = Promise.resolve();
 
+// 준비 상태 플래그
+let cvReady = false;
+let sessionReady = false;
+
+// 모델 파라미터
 const INPUT_NAME = "input";
 const MODEL_SIZE = 320;
 const MEAN = [123.675, 116.28, 103.53];
 const STD = [58.395, 57.12, 57.375];
 const SCORE_THRESH = 0.97;
 
-// readiness flags
-let cvReady = false;
-let sessionReady = false;
+// OpenCV 재사용 Mat들
+let resize_mat_1;
+let gray_mat1;
+let gray_mat2;
+let pad_mat;
+let blackScalar;
 
-// global Mats (will init after cvReady)
-let resize_mat_1,
-  gray_mat1,
-  gray_mat2,
-  pad_mat,
-  blackScalar,
-  resize_mat,
-  dsize1920x1080,
-  crop_mat,
-  png_mat;
+let resize_mat_full;
+let dsize1920x1080;
+let crop_mat;
+let rgba_mat;
 
+// WebAssembly 튜닝 (wasm EP 쓸 때 효과적)
+ort.env.wasm.numThreads = self.navigator?.hardwareConcurrency || 4;
+ort.env.wasm.simd = true;
+ort.env.logLevel = "warning";
+
+// OpenCV 로드 완료 후 초기화
 cv.onRuntimeInitialized = () => {
   resize_mat_1 = new cv.Mat();
   gray_mat1 = new cv.Mat();
@@ -34,16 +43,16 @@ cv.onRuntimeInitialized = () => {
   pad_mat = new cv.Mat();
   blackScalar = new cv.Scalar(0, 0, 0, 255);
 
-  resize_mat = new cv.Mat();
+  resize_mat_full = new cv.Mat();
   dsize1920x1080 = new cv.Size(1920, 1080);
   crop_mat = new cv.Mat();
-  png_mat = new cv.Mat();
+  rgba_mat = new cv.Mat();
 
   cvReady = true;
   postMessage({ type: "cv_ready" });
 };
 
-// helper to wait until condition true
+// readiness wait helper
 function waitUntil(pred) {
   return new Promise((resolve) => {
     function check() {
@@ -54,24 +63,29 @@ function waitUntil(pred) {
   });
 }
 
-// worker messages
+// onmessage 직렬화
 onmessage = (e) => {
   const msg = e.data;
   queue = queue
     .then(() => handleMessage(msg))
     .catch((err) => {
-      postMessage({ type: "error", error: String((err && err.stack) || err) });
+      postMessage({
+        type: "error",
+        error: String(err && err.stack ? err.stack : err),
+      });
     });
 };
 
 async function handleMessage(msg) {
   if (msg.type === "init") {
-    // ensure cv runtime ready
+    // OpenCV 준비까지 대기
     await waitUntil(() => cvReady);
 
     if (!sessionReady) {
+      // EP 하나만 사용해 혼합 실행 문제 제거
+      // 빠른 GPU 추론을 원하면 ["webgpu"]로 시도해도 된다.
       session = await ort.InferenceSession.create(msg.modelBytes, {
-        executionProviders: ["webgpu", "wasm"],
+        executionProviders: ["wasm"],
         graphOptimizationLevel: "all",
       });
       sessionReady = true;
@@ -82,104 +96,82 @@ async function handleMessage(msg) {
   }
 
   if (msg.type === "process") {
-    // wait for cv + session to be ready
+    // 세션과 OpenCV가 준비될 때까지 대기
     await waitUntil(() => cvReady && sessionReady);
 
     const { imageBytes, baseName } = msg;
 
-    // decode bytes -> ImageData
+    // 디코드
     const bmp = await createImageBitmap(new Blob([imageBytes]));
     const imW = bmp.width;
     const imH = bmp.height;
+
     const c1 = new OffscreenCanvas(imW, imH);
     const ctx = c1.getContext("2d");
     ctx.drawImage(bmp, 0, 0, imW, imH);
     bmp.close();
+
     const imgData = ctx.getImageData(0, 0, imW, imH);
 
-    // run pipeline
+    // 이 프레임 처리
     let cropResult;
     try {
       cropResult = await processOne(imgData, baseName);
     } catch (err) {
-      postMessage({ type: "error", error: String((err && err.stack) || err) });
+      // 한 프레임 실패. 전체 파이프라인은 계속된다.
+      postMessage({
+        type: "error",
+        error: String(err && err.stack ? err.stack : err),
+      });
       return;
     }
 
     const { name, pngBytes, coord } = cropResult;
 
-    // transfer pngBytes buffer
+    // 결과 전송. pngBytes ArrayBuffer는 transfer
     postMessage({ type: "result", crops: { name, pngBytes, coord } }, [
       pngBytes,
     ]);
+
     return;
   }
 
   if (msg.type === "finish") {
-    // wait for everything to drain
+    // drain 보장
     await waitUntil(() => cvReady && sessionReady);
     postMessage({ type: "done" });
     return;
   }
 }
 
-// single frame inference
+// 단일 프레임 처리
 async function processOne(imgData, baseName) {
   const { inputTensor, ratio, pad, srcMat } = preprocessToTensor(
     imgData,
     MODEL_SIZE
   );
 
-  // inference
+  // 추론
   const feeds = { [INPUT_NAME]: inputTensor };
   const outputMap = await session.run(feeds);
 
   const scores = outputMap["scores"].data;
   const bboxes = outputMap["bboxes"].data;
 
-  // pick best box near center
-  const rows = scores.filter((v) => v !== 0).length;
-  let minCenterDistance = 2.0;
-  let box = { x1: 0, y1: 0, x2: MODEL_SIZE, y2: MODEL_SIZE };
+  // bbox 선택
+  let bestBox = pickBox(bboxes, scores);
 
-  for (let i = 0; i < rows; i++) {
-    const off = i * 4;
-    const ncx = bboxes[off + 0];
-    const ncy = bboxes[off + 1];
-    const nw = bboxes[off + 2] + 0.05;
-    const nh = bboxes[off + 3] + 0.05;
-
-    const cx = ncx * MODEL_SIZE;
-    const cy = ncy * MODEL_SIZE;
-    const w = nw * MODEL_SIZE;
-    const h = nh * MODEL_SIZE;
-
-    const conf = scores[i];
-    if (conf < SCORE_THRESH) continue;
-
-    const centerDistance =
-      (ncx - 0.5) * (ncx - 0.5) + (ncy - 0.5) * (ncy - 0.5);
-    if (centerDistance < minCenterDistance) {
-      minCenterDistance = centerDistance;
-      box = {
-        x1: cx - w / 2,
-        y1: cy - h / 2,
-        x2: cx + w / 2,
-        y2: cy + h / 2,
-      };
-    }
-  }
-
-  // map box from letterboxed 320x320 back to 3840x2160
-  // Note: here you hardcoded 3840x2160. If images can vary, replace with srcMat.cols/srcMat.rows.
+  // 3840x2160을 가정한다. 만약 해상도가 변할 수 있으면
+  // srcMat.cols, srcMat.rows를 써서 동적으로 처리해라.
   const origW = 3840;
   const origH = 2160;
-  const mappedBox = deLetterbox(box, origW, origH, MODEL_SIZE, ratio, pad);
 
-  // crop -> pngBytes
-  const { buf, coord } = await cropToPNG(srcMat, mappedBox, origW);
+  const mapped = deLetterbox(bestBox, origW, origH, MODEL_SIZE, ratio, pad);
 
-  // cleanup the per-frame srcMat
+  // 크롭 및 PNG 인코딩
+  const { buf, coord } = await cropToPNG(srcMat, mapped, origW);
+
+  // srcMat 정리
   srcMat.delete();
 
   return {
@@ -189,14 +181,16 @@ async function processOne(imgData, baseName) {
   };
 }
 
-// preprocess: letterbox -> grayscale -> RGBA -> CHW float32
+// 전처리: letterbox + grayscale + normalize → float32 NCHW
 function preprocessToTensor(imgData, size) {
-  // assume fixed source resolution 3840x2160. adjust if needed:
+  // 해상도 고정 가정
   const inW = 3840;
   const inH = 2160;
 
+  // ImageData -> Mat
   const srcMat = cv.matFromImageData(imgData);
 
+  // letterbox 비율 및 패딩 계산
   const r = Math.min(size / inW, size / inH);
   const newW = Math.round(inW * r);
   const newH = Math.round(inH * r);
@@ -213,6 +207,7 @@ function preprocessToTensor(imgData, size) {
   const left = Math.round(padW / 2);
   const bottom = padH - top;
   const right = padW - left;
+
   cv.copyMakeBorder(
     gray_mat2,
     pad_mat,
@@ -224,20 +219,25 @@ function preprocessToTensor(imgData, size) {
     blackScalar
   );
 
-  // pad_mat is size x size RGBA
+  // RGBA -> Float32 CHW
   const chw = rgbaToCHWFloat32(pad_mat, size);
 
   const tensor = new ort.Tensor("float32", chw, [1, 3, size, size]);
 
-  return { inputTensor: tensor, ratio: r, pad: { y: top, x: left }, srcMat };
+  return {
+    inputTensor: tensor,
+    ratio: r,
+    pad: { y: top, x: left },
+    srcMat,
+  };
 }
 
-// convert RGBA Mat -> Float32 CHW normalized
+// RGBA Mat -> Float32 CHW 정규화
 function rgbaToCHWFloat32(rgbaMat, size) {
   const data = rgbaMat.data; // Uint8Array RGBA
-  const out = new Float32Array(3 * size * size);
-
   const plane = size * size;
+  const out = new Float32Array(3 * plane);
+
   let rOff = 0;
   let gOff = plane;
   let bOff = plane * 2;
@@ -256,31 +256,72 @@ function rgbaToCHWFloat32(rgbaMat, size) {
   return out;
 }
 
-// reverse letterbox coords back to original coords
-function deLetterbox(b, origW, origH, size, ratio, pad) {
-  const clamp01 = (v) => Math.max(0, Math.min(size, v));
+// bbox 선택: 중앙에 가까우면서 SCORE_THRESH 이상인 박스
+function pickBox(bboxes, scores) {
+  let minCenter = 2.0;
+  let box = { x1: 0, y1: 0, x2: MODEL_SIZE, y2: MODEL_SIZE };
 
-  const x1n = (clamp01(b.x1) - pad.x) / ratio;
-  const y1n = (clamp01(b.y1) - pad.y) / ratio;
-  const x2n = (clamp01(b.x2) - pad.x) / ratio;
-  const y2n = (clamp01(b.y2) - pad.y) / ratio;
+  const rows = scores.length;
+  for (let i = 0; i < rows; i++) {
+    const conf = scores[i];
+    if (conf < SCORE_THRESH) continue;
+
+    const off = i * 4;
+    const ncx = bboxes[off + 0];
+    const ncy = bboxes[off + 1];
+    const nw = bboxes[off + 2] + 0.05;
+    const nh = bboxes[off + 3] + 0.05;
+
+    const cx = ncx * MODEL_SIZE;
+    const cy = ncy * MODEL_SIZE;
+    const w = nw * MODEL_SIZE;
+    const h = nh * MODEL_SIZE;
+
+    const centerDist = (ncx - 0.5) * (ncx - 0.5) + (ncy - 0.5) * (ncy - 0.5);
+
+    if (centerDist < minCenter) {
+      minCenter = centerDist;
+      box = {
+        x1: cx - w / 2,
+        y1: cy - h / 2,
+        x2: cx + w / 2,
+        y2: cy + h / 2,
+      };
+    }
+  }
+  return box;
+}
+
+// letterbox 좌표를 원본 좌표로 복원
+function deLetterbox(b, origW, origH, size, ratio, pad) {
+  function clamp(v, lo, hi) {
+    return v < lo ? lo : v > hi ? hi : v;
+  }
+
+  // 모델 좌표계에서 유효범위 보정
+  const x1c = clamp(b.x1, 0, size);
+  const y1c = clamp(b.y1, 0, size);
+  const x2c = clamp(b.x2, 0, size);
+  const y2c = clamp(b.y2, 0, size);
+
+  // 패딩 제거하고 ratio로 나눔
+  const x1 = (x1c - pad.x) / ratio;
+  const y1 = (y1c - pad.y) / ratio;
+  const x2 = (x2c - pad.x) / ratio;
+  const y2 = (y2c - pad.y) / ratio;
 
   return {
-    x1: clamp(x1n, 0, origW),
-    y1: clamp(y1n, 0, origH),
-    x2: clamp(x2n, 0, origW),
-    y2: clamp(y2n, 0, origH),
+    x1: clamp(x1, 0, origW),
+    y1: clamp(y1, 0, origH),
+    x2: clamp(x2, 0, origW),
+    y2: clamp(y2, 0, origH),
   };
 }
 
-function clamp(v, lo, hi) {
-  return v < lo ? lo : v > hi ? hi : v;
-}
-
-// crop and encode PNG
+// 크롭해서 PNG ArrayBuffer로 변환
 async function cropToPNG(srcMat, mappedBox, origW) {
-  // first downscale full frame to 1920x1080
-  cv.resize(srcMat, resize_mat, dsize1920x1080);
+  // 전체 프레임을 1920x1080으로 리사이즈 (재사용 buffer)
+  cv.resize(srcMat, resize_mat_full, dsize1920x1080);
 
   const scale = 1920 / origW;
   const rx = Math.round(mappedBox.x1 * scale);
@@ -288,36 +329,36 @@ async function cropToPNG(srcMat, mappedBox, origW) {
   const rw = Math.max(1, Math.round((mappedBox.x2 - mappedBox.x1) * scale));
   const rh = Math.max(1, Math.round((mappedBox.y2 - mappedBox.y1) * scale));
 
-  // roi view
+  // roi 뷰 만들고 copyTo로 안전하게 복사한 뒤 roiMat 해제
   const rect = new cv.Rect(rx, ry, rw, rh);
-  const roiTmp = resize_mat.roi(rect);
+  const roiMat = resize_mat_full.roi(rect);
+  roiMat.copyTo(crop_mat);
+  roiMat.delete();
 
-  // copy roiTmp data into crop_mat, then free roiTmp
-  roiTmp.copyTo(crop_mat);
-  roiTmp.delete();
-
-  // RGB -> RGBA
-  cv.cvtColor(crop_mat, png_mat, cv.COLOR_RGB2RGBA, 0);
+  // RGBA로 변환
+  cv.cvtColor(crop_mat, rgba_mat, cv.COLOR_RGB2RGBA, 0);
 
   const png_imgData = new ImageData(
-    new Uint8ClampedArray(png_mat.data),
-    png_mat.cols,
-    png_mat.rows
+    new Uint8ClampedArray(rgba_mat.data),
+    rgba_mat.cols,
+    rgba_mat.rows
   );
 
   const bmp = await createImageBitmap(png_imgData);
 
-  const canvas = new OffscreenCanvas(rw, rh);
-  const ctx = canvas.getContext("2d");
+  const c2 = new OffscreenCanvas(rw, rh);
+  const ctx = c2.getContext("2d");
   ctx.drawImage(bmp, 0, 0, rw, rh);
-  const blob = await canvas.convertToBlob({ type: "image/png" });
 
+  const blob = await c2.convertToBlob({ type: "image/png" });
   const buf = await blob.arrayBuffer();
+
   const coord = {
     x1: mappedBox.x1,
     y1: mappedBox.y1,
     x2: mappedBox.x2,
     y2: mappedBox.y2,
   };
+
   return { buf, coord };
 }
