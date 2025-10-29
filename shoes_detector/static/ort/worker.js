@@ -1,4 +1,3 @@
-// worker.js
 importScripts(
   "https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.all.min.js"
 );
@@ -13,6 +12,16 @@ const MODEL_SIZE = 320; // 정사각 입력 가정
 const MEAN = [123.675, 116.28, 103.53]; // 필요 시 [0.485,0.456,0.406]
 const STD = [58.395, 57.12, 57.375]; // 필요 시 [0.229,0.224,0.225]
 const SCORE_THRESH = 0.97;
+
+let resize_mat_1 = new cv.Mat();
+let gray_mat1 = new cv.Mat();
+let gray_mat2 = new cv.Mat();
+let pad_mat = new cv.Mat();
+let s = new cv.Scalar(0, 0, 0, 255);
+let resize_mat = new cv.Mat();
+let dsize = new cv.Size(1920, 1080);
+let crop_mat = new cv.Mat();
+let png_mat = new cv.Mat();
 
 // postMessage helper
 const send = (type, payload = {}) => postMessage({ type, ...payload });
@@ -144,11 +153,6 @@ async function processOne(imgData, baseName) {
 }
 
 // === 전처리: letterbox resize + normalize → Float32 CHW 텐서 ===
-let resize_mat_1 = new cv.Mat();
-let gray_mat1 = new cv.Mat();
-let gray_mat2 = new cv.Mat();
-let pad_mat = new cv.Mat();
-let s = new cv.Scalar(0, 0, 0, 255);
 function preprocessToTensor(imgData, size) {
   const inW = 3840,
     inH = 2160;
@@ -163,10 +167,11 @@ function preprocessToTensor(imgData, size) {
 
   let dsize = new cv.Size(newW, newH);
   cv.resize(src, resize_mat_1, dsize);
+  src.delete();
 
-  cv.cvtColor(resize_mat_1, gray_mat1_1, cv.COLOR_RGB2GRAY, 0);
+  cv.cvtColor(resize_mat_1, gray_mat1, cv.COLOR_RGB2GRAY, 0);
 
-  cv.cvtColor(gray_mat1_1, gray_mat2, cv.COLOR_GRAY2RGBA, 0);
+  cv.cvtColor(gray_mat1, gray_mat2, cv.COLOR_GRAY2RGBA, 0);
 
   const top = Math.round(padH / 2),
     left = Math.round(padW / 2);
@@ -238,10 +243,6 @@ function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
 }
 
-let resize_mat = new cv.Mat();
-let dsize = new cv.Size(1920, 1080);
-let crop_mat = new cv.Mat();
-let png_mat = new cv.Mat();
 // === OffscreenCanvas 크롭 → PNG 바이트(ArrayBuffer) ===
 async function cropToPNG(imgData, x1, y1, x2, y2) {
   const imW = 3840,
