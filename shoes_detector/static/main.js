@@ -4,6 +4,7 @@ const startBtn = document.querySelector("#start");
 const modelInput = document.querySelector("#modelFile");
 const prog = document.querySelector("#prog");
 const statusEl = document.querySelector("#status");
+const imageSave = document.querySelector("#image_save");
 
 let dirHandle = null;
 let outDir = null;
@@ -105,10 +106,12 @@ startBtn.onclick = async () => {
       const { name, pngBytes, coord } = msg.crops;
 
       // 1. 크롭 PNG 저장
-      const fileHandle = await outDir.getFileHandle(name, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(pngBytes);
-      await writable.close();
+      if (imageSave.checked) {
+        const fileHandle = await outDir.getFileHandle(name, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(pngBytes);
+        await writable.close();
+      }
 
       // 2. CSV 라인 메모리에 push
       const { x1, y1, x2, y2 } = coord;
@@ -176,7 +179,7 @@ async function processAllFiles() {
 
         // 워커에 전송. ArrayBuffer는 transfer
         worker.postMessage(
-          { type: "process", imageBytes: imgBytes, baseName: base },
+          { type: "process", imageBytes: imgBytes, baseName: base, imageSave },
           [imgBytes]
         );
       } catch (err) {
@@ -200,7 +203,9 @@ async function processAllFiles() {
   // 모든 process 메시지를 던졌으면 finish 알림
   worker.postMessage({ type: "finish" });
 }
-
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 // CSV 한 번만 기록
 async function finalizeCsvOnce() {
   if (csvFlushed) return;
@@ -214,6 +219,7 @@ async function finalizeCsvOnce() {
     await txtWritable.write(csvRows.join("\n") + "\n");
     await txtWritable.close();
 
+    await sleep(1000);
     statusEl.textContent = `완료! ${doneFiles}/${totalFiles}`;
   } catch (err) {
     console.error("CSV flush error", err);

@@ -99,7 +99,7 @@ async function handleMessage(msg) {
     // 세션과 OpenCV가 준비될 때까지 대기
     await waitUntil(() => cvReady && sessionReady);
 
-    const { imageBytes, baseName } = msg;
+    const { imageBytes, baseName, imageSave } = msg;
 
     // 디코드
     const bmp = await createImageBitmap(new Blob([imageBytes]));
@@ -116,7 +116,7 @@ async function handleMessage(msg) {
     // 이 프레임 처리
     let cropResult;
     try {
-      cropResult = await processOne(imgData, baseName);
+      cropResult = await processOne(imgData, baseName, imageSave);
     } catch (err) {
       // 한 프레임 실패. 전체 파이프라인은 계속된다.
       postMessage({
@@ -145,7 +145,7 @@ async function handleMessage(msg) {
 }
 
 // 단일 프레임 처리
-async function processOne(imgData, baseName) {
+async function processOne(imgData, baseName, imageSave) {
   const { inputTensor, ratio, pad, srcMat } = preprocessToTensor(
     imgData,
     MODEL_SIZE
@@ -169,7 +169,19 @@ async function processOne(imgData, baseName) {
   const mapped = deLetterbox(bestBox, origW, origH, MODEL_SIZE, ratio, pad);
 
   // 크롭 및 PNG 인코딩
-  const { buf, coord } = await cropToPNG(srcMat, mapped, origW);
+  const coord = {
+    x1: mappedBox.x1,
+    y1: mappedBox.y1,
+    x2: mappedBox.x2,
+    y2: mappedBox.y2,
+  };
+
+  let buf;
+  if (imageSave) {
+    buf = await cropToPNG(srcMat, mapped, origW);
+  } else {
+    buf = "";
+  }
 
   // srcMat 정리
   srcMat.delete();
@@ -353,12 +365,5 @@ async function cropToPNG(srcMat, mappedBox, origW) {
   const blob = await c2.convertToBlob({ type: "image/png" });
   const buf = await blob.arrayBuffer();
 
-  const coord = {
-    x1: mappedBox.x1,
-    y1: mappedBox.y1,
-    x2: mappedBox.x2,
-    y2: mappedBox.y2,
-  };
-
-  return { buf, coord };
+  return buf;
 }
